@@ -1,9 +1,14 @@
+#include <LiquidCrystal.h>
+
+const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
 enum INPUT_PINS{
-  MODE_BUTTON = 8
+  MODE_BUTTON = 10
 };
 
 enum OUTPUT_PINS{
-  READ_LED = 7
+  READ_LED = 9
 };
 
 enum MonitorState{
@@ -18,6 +23,8 @@ unsigned long end = 0; // end timer memory
 long sumAmperage = 0;
 enum MonitorState currentState = OFF;
 
+using BoolFunc = bool(*)();
+
 // variables will change:
 int currentButtonState = 0;  // variable for reading the pushbutton status
 int previousButtonState = 0;
@@ -25,6 +32,7 @@ int previousButtonState = 0;
 void setup() {
   // for debugging
   Serial.begin(9600);
+  lcd.begin(16, 2);
   // initialize the LED pin as an output:
   pinMode(READ_LED, OUTPUT);
   // initialize the pushbutton pin as an input:
@@ -48,11 +56,10 @@ void loop() {
       // 1. We're going to stop reading inputs from the button
       // 2. We're then going to get the currentAmperage and
       //    use the SHOW_LED to tell the user what the summed amps
-      Serial.print("We would be showing now! ");
-      Serial.println(sumAmperage);
+      printLcdMessage(sumAmperage);
       delay(1000);
       currentState = READ;
-      Serial.println("SET SHOW TO READ");
+      printLcdMessage("SET SHOW TO READ");
       break;
   }
 
@@ -67,29 +74,45 @@ void loop() {
   delay(20); // for sensitivity issues
 }
 
-// void ShowSummedAmps(){
-//   int primaryDigit = 0;
-//   do{
+void ShowSummedAmps(){
+  int primaryDigit = 0;
+  do{
 
-//   }while(primaryDigit != 0);
-// }
+  }while(primaryDigit != 0);
+}
 
 
-int readButtonState(int button){
-  delay(1);
-  return digitalRead(button);
+void awaitCurrentButtonState(uint8_t button, uint8_t level){
+  while(currentButtonState == level){
+    currentButtonState = digitalRead(button);
+    delay(5);
+  }
+}
+void awaitCurrentButtonState(uint8_t button, uint8_t level, BoolFunc func){
+  while(currentButtonState == level && func()){
+    currentButtonState = digitalRead(button);
+    delay(5);
+  }
+}
+
+void printLcdMessage(const char* msg){
+  lcd.clear();
+  lcd.print(msg);
+}
+void printLcdMessage(long number){
+  lcd.clear();
+  lcd.print(number);
 }
 
 void SetRequestedAction(){
+  lcd.setCursor(0, 1);
   switch(currentState){
     case OFF:
       // The only thing we can do from OFF is start reading
       // So we wait until the user lets go of the button then we set mode to READ
-      while(currentButtonState == HIGH){
-        currentButtonState = digitalRead(MODE_BUTTON);
-      }
+      awaitCurrentButtonState(MODE_BUTTON, HIGH);
       currentState = READ;
-      Serial.println("SET OFF TO READ");
+      printLcdMessage("SET OFF TO READ");
       break;
     case READ:
       // We can either turn OFF, or SHOW the current reading
@@ -98,27 +121,26 @@ void SetRequestedAction(){
       start = millis();
 
       // 2. Wait for user to release button OR until click sensitivity time has passed
-      while(currentButtonState == HIGH && millis() - start < clickSensitivityTime){
-        currentButtonState = digitalRead(MODE_BUTTON);
-      }
+      auto timeCheck = []() -> bool {
+        return millis() - start < clickSensitivityTime;
+      };
+      awaitCurrentButtonState(MODE_BUTTON, HIGH, timeCheck);
 
       // 3. If the button is still pressed, set state to SHOW
       // else set the state to OFF
       if(currentButtonState == HIGH){
         currentState = SHOW;
-        Serial.println("SET READ TO SHOW");
+        printLcdMessage("SET READ TO SHOW");
       }else{
         currentState = OFF;
-        Serial.println("SET READ TO OFF");
+        printLcdMessage("SET READ TO OFF");
       }
 
       // 4. Turn LED off to show user that we are about to show the reading
       digitalWrite(READ_LED, LOW);
 
       // 5. Wait for user to let go of button
-      while(currentButtonState == HIGH){
-        currentButtonState = digitalRead(MODE_BUTTON);
-      }
+      awaitCurrentButtonState(MODE_BUTTON, HIGH);
       break;
     case SHOW:
       // Do nothing
