@@ -157,7 +157,6 @@ void printLcdMessage(float number){
 }
 
 void SetRequestedAction(){
-  lcd.setCursor(0, 1);
   switch(currentState){
     case OFF:
       // The only thing we can do from OFF is start reading
